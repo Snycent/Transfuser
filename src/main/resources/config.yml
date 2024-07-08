@@ -1,0 +1,10 @@
+#################################
+# Made by Cyberguin aka Snoxium #
+#################################
+Transfuser-Remote-Item:
+  Name: '&1Transfuser Remote'
+  Lore: '&7Click with this item to\n &7access your transfusers'
+  Material: STICK
+  #CustomModelData: 12000 - This is for ItemsAdder/Oraxen
+  CustomModelData: 12000 #Set this up first. If changed, all other items that are not this id will stop working!
+Use-Transfuser-Command: false #set to true if you want users to use /transfuser to open their transfusers menu
