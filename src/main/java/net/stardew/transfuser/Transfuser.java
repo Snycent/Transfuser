@@ -1,6 +1,7 @@
 package net.stardew.transfuser;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -26,6 +27,8 @@ import java.util.*;
 public final class Transfuser extends JavaPlugin implements Listener, TabExecutor {
 
     private final HashMap<UUID, HashMap<String, Inventory>> playerTransfusers = new HashMap<>();
+    private int customModelData;
+    private boolean useTransfuserCommand;
 
     @Override
     public void onEnable() {
@@ -33,6 +36,8 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         this.getCommand("transfuser").setExecutor(this);
         this.getCommand("transfuser").setTabCompleter(this);
         saveDefaultConfig();
+        customModelData = getConfig().getInt("Transfuser-Remote-Item.CustomModelData");
+        useTransfuserCommand = getConfig().getBoolean("Use-Transfuser-Command");
         loadAllTransfusers();
     }
 
@@ -43,9 +48,9 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (event.getItem() != null && event.getItem().getType() == Material.FEATHER) {
+        if (event.getItem() != null && event.getItem().getType() == Material.STICK) {
             ItemMeta meta = event.getItem().getItemMeta();
-            if (meta != null && meta.hasCustomModelData() && meta.getCustomModelData() == 10027) {
+            if (meta != null && meta.hasCustomModelData() && meta.getCustomModelData() == customModelData) {
                 openTransfuserMenu(event.getPlayer());
                 event.setCancelled(true);
             }
@@ -251,12 +256,57 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (sender instanceof Player) {
             Player player = (Player) sender;
-            if (args.length > 0 && args[0].equalsIgnoreCase("create")) {
-                openCreateTransfuserMenu(player);
-            } else if (args.length > 0 && args[0].equalsIgnoreCase("destroy")) {
-                openDestroyTransfuserMenu(player);
-            } else {
-                openTransfuserMenu(player);
+            if (args.length > 0) {
+                if (args[0].equalsIgnoreCase("create")) {
+                    if (player.hasPermission("transfuser.create")) {
+                        openCreateTransfuserMenu(player);
+                    } else {
+                        player.sendMessage("You do not have permission to create a transfuser.");
+                    }
+                } else if (args[0].equalsIgnoreCase("destroy")) {
+                    if (player.hasPermission("transfuser.destroy")) {
+                        openDestroyTransfuserMenu(player);
+                    } else {
+                        player.sendMessage("You do not have permission to destroy a transfuser.");
+                    }
+                } else if (args[0].equalsIgnoreCase("get") && args.length == 2) {
+                    if (player.hasPermission("transfuser.admin")) {
+                        int amount;
+                        try {
+                            amount = Integer.parseInt(args[1]);
+                        } catch (NumberFormatException e) {
+                            player.sendMessage("Invalid amount.");
+                            return false;
+                        }
+                        giveTransfuserRemote(player, amount);
+                    } else {
+                        player.sendMessage("You do not have permission to use this command.");
+                    }
+                } else if (args[0].equalsIgnoreCase("give") && args.length == 3) {
+                    if (player.hasPermission("transfuser.admin")) {
+                        Player target = Bukkit.getPlayer(args[1]);
+                        if (target != null) {
+                            int amount;
+                            try {
+                                amount = Integer.parseInt(args[2]);
+                            } catch (NumberFormatException e) {
+                                player.sendMessage("Invalid amount.");
+                                return false;
+                            }
+                            giveTransfuserRemote(target, amount);
+                        } else {
+                            player.sendMessage("Player not found.");
+                        }
+                    } else {
+                        player.sendMessage("You do not have permission to use this command.");
+                    }
+                } else {
+                    if (useTransfuserCommand && player.hasPermission("transfuser.use")) {
+                        openTransfuserMenu(player);
+                    } else {
+                        player.sendMessage("You do not have permission to use this command.");
+                    }
+                }
             }
             return true;
         }
@@ -299,11 +349,41 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         }
         player.openInventory(gui);
     }
+    private void giveTransfuserRemote(Player player, int amount) {
+        FileConfiguration config = getConfig();
+        String materialName = config.getString("Transfuser-Remote-Item.Material");
+        Material material = Material.valueOf(materialName);
+
+        ItemStack remote = new ItemStack(material, amount);
+        ItemMeta meta = remote.getItemMeta();
+
+        String displayName = ChatColor.translateAlternateColorCodes('&', config.getString("Transfuser-Remote-Item.Name"));
+        meta.setDisplayName(displayName);
+
+        List<String> lore = new ArrayList<>();
+        for (String line : config.getString("Transfuser-Remote-Item.Lore").split("\\\\n")) {
+            lore.add(ChatColor.translateAlternateColorCodes('&', line));
+        }
+        meta.setLore(lore);
+
+        int customModelData = config.getInt("Transfuser-Remote-Item.CustomModelData");
+        meta.setCustomModelData(customModelData);
+
+        remote.setItemMeta(meta);
+        player.getInventory().addItem(remote);
+        player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&aYou have been given " + amount + " Transfuser Remote(s)."));
+    }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return Arrays.asList("create", "destroy");
+            return Arrays.asList("create", "destroy", "get", "give");
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
+            List<String> playerNames = new ArrayList<>();
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                playerNames.add(player.getName());
+            }
+            return playerNames;
         }
         return null;
     }
