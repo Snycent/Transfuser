@@ -1,27 +1,19 @@
 package net.stardew.transfuser;
 
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.Material;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
-import org.bukkit.command.TabExecutor;
-import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.*;
+import org.bukkit.command.*;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.*;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.entity.*;
+import org.bukkit.event.*;
+import org.bukkit.event.inventory.*;
+import org.bukkit.event.player.*;
+import org.bukkit.inventory.*;
+import org.bukkit.inventory.meta.*;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
 
 public final class Transfuser extends JavaPlugin implements Listener, TabExecutor {
@@ -33,8 +25,8 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
     @Override
     public void onEnable() {
         getServer().getPluginManager().registerEvents(this, this);
-        this.getCommand("transfuser").setExecutor(this);
-        this.getCommand("transfuser").setTabCompleter(this);
+        getCommand("transfuser").setExecutor(new TransfuserCommands(this));
+        getCommand("transfuser").setTabCompleter(new TransfuserCommands(this));
         saveDefaultConfig();
         customModelData = getConfig().getInt("Transfuser-Remote-Item.CustomModelData");
         useTransfuserCommand = getConfig().getBoolean("Use-Transfuser-Command");
@@ -48,9 +40,13 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (event.getItem() != null && event.getItem().getType() == Material.STICK) {
+        if (event.getItem() != null) {
+            FileConfiguration config = getConfig();
+            String materialName = config.getString("Transfuser-Remote-Item.Material");
+            Material material = Material.valueOf(materialName);
             ItemMeta meta = event.getItem().getItemMeta();
-            if (meta != null && meta.hasCustomModelData() && meta.getCustomModelData() == customModelData) {
+
+            if (event.getItem().getType() == material && meta != null && meta.hasCustomModelData() && meta.getCustomModelData() == customModelData) {
                 openTransfuserMenu(event.getPlayer());
                 event.setCancelled(true);
             }
@@ -59,7 +55,10 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        if (event.getView().getTitle().equals("Create Transfuser")) {
+        if (event.getView().getTitle().startsWith("Rename Transfuser to ")) {
+            event.setCancelled(true);
+            handleRenameTransfuserClick(event);
+        } else if (event.getView().getTitle().equals("Create Transfuser")) {
             event.setCancelled(true);
             handleCreateTransfuserClick(event);
         } else if (event.getView().getTitle().equals("Your Transfusers")) {
@@ -74,13 +73,13 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         String title = event.getView().getTitle();
-        if (!title.equals("Create Transfuser") && !title.equals("Your Transfusers") && !title.equals("Destroy Transfuser")) {
+        if (!title.equals("Create Transfuser") && !title.equals("Your Transfusers") && !title.equals("Destroy Transfuser") && !title.equals("Rename Transfuser to ")) {
             saveTransfuserContent((Player) event.getPlayer(), title, event.getInventory());
         }
     }
 
     private void handleCreateTransfuserClick(InventoryClickEvent event) {
-        if (event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.CHEST) {
+        if (event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.ENDER_CHEST) {
             Player player = (Player) event.getWhoClicked();
             ItemMeta meta = event.getCurrentItem().getItemMeta();
             if (meta != null) {
@@ -99,7 +98,7 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
     }
 
     private void handleTransfuserClick(InventoryClickEvent event) {
-        if (event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.CHEST) {
+        if (event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.ENDER_CHEST) {
             Player player = (Player) event.getWhoClicked();
             ItemMeta meta = event.getCurrentItem().getItemMeta();
             if (meta != null) {
@@ -110,7 +109,7 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
     }
 
     private void handleDestroyTransfuserClick(InventoryClickEvent event) {
-        if (event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.CHEST) {
+        if (event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.ENDER_CHEST) {
             Player player = (Player) event.getWhoClicked();
             ItemMeta meta = event.getCurrentItem().getItemMeta();
             if (meta != null) {
@@ -121,11 +120,29 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         }
     }
 
-    private void openTransfuserMenu(Player player) {
+    private void handleRenameTransfuserClick(InventoryClickEvent event) {
+        if (event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.ENDER_CHEST) {
+            Player player = (Player) event.getWhoClicked();
+            ItemMeta meta = event.getCurrentItem().getItemMeta();
+            if (meta != null) {
+                String oldName = meta.getDisplayName();
+                String newName = ChatColor.stripColor(event.getView().getTitle().replace("Rename Transfuser to ", ""));
+                
+                if (!newName.isEmpty()) {
+                    renameTransfuser(player, oldName, newName);
+                } else {
+                    player.sendMessage("Invalid new name.");
+                }
+                player.closeInventory();
+            }
+        }
+    }
+
+    public void openTransfuserMenu(Player player) {
         Inventory gui = Bukkit.createInventory(null, 27, "Your Transfusers");
         List<String> transfusers = getPlayerConfig(player).getStringList("transfusers");
         for (String transfuser : transfusers) {
-            ItemStack item = new ItemStack(Material.CHEST);
+            ItemStack item = new ItemStack(Material.ENDER_CHEST);
             ItemMeta meta = item.getItemMeta();
             meta.setDisplayName(transfuser);
             item.setItemMeta(meta);
@@ -140,7 +157,7 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
             player.openInventory(playerTransfusers.get(playerUUID).get(name));
         } else {
             FileConfiguration playerConfig = getPlayerConfig(player);
-            int size = playerConfig.getInt("contents." + name + ".size", 27); // Default size, customize based on transfuser type if needed
+            int size = playerConfig.getInt("contents." + name + ".size", 27); // Default size
             Inventory transfuserInv = Bukkit.createInventory(null, size, name);
             List<?> itemList = playerConfig.getList("contents." + name + ".items");
             if (itemList != null) {
@@ -167,7 +184,7 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         player.sendMessage("Created a " + name);
     }
 
-    private void destroyTransfuser(Player player, String name) {
+    public void destroyTransfuser(Player player, String name) {
         UUID playerUUID = player.getUniqueId();
         FileConfiguration playerConfig = getPlayerConfig(player);
         List<String> transfusers = playerConfig.getStringList("transfusers");
@@ -183,7 +200,42 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         }
     }
 
-    private void saveTransfuserContent(Player player, String name, Inventory inventory) {
+    public void renameTransfuser(Player player, String oldName, String newName) {
+        UUID playerUUID = player.getUniqueId();
+        FileConfiguration playerConfig = getPlayerConfig(player);
+
+        List<String> transfusers = playerConfig.getStringList("transfusers");
+
+        // Check if the new name already exists or if old name does not exist
+        if (transfusers.contains(newName) || !transfusers.contains(oldName)) {
+            player.sendMessage("Cannot rename transfuser: " + oldName + " to " + newName);
+            return;
+        }
+
+        // Update transfusers list
+        int index = transfusers.indexOf(oldName);
+        transfusers.set(index, newName);
+        playerConfig.set("transfusers", transfusers);
+
+        // Update contents section
+        ConfigurationSection contents = playerConfig.getConfigurationSection("contents");
+        if (contents != null && contents.contains(oldName)) {
+            ConfigurationSection oldTransfuser = contents.getConfigurationSection(oldName);
+            if (oldTransfuser != null) {
+                int size = oldTransfuser.getInt("size");
+                List<?> items = oldTransfuser.getList("items");
+                playerConfig.set("contents." + newName + ".size", size);
+                playerConfig.set("contents." + newName + ".items", items);
+            }
+            // Remove old transfuser entry
+            playerConfig.set("contents." + oldName, null);
+        }
+
+        savePlayerConfig(player, playerConfig);
+        player.sendMessage("Renamed the transfuser from " + oldName + " to " + newName);
+    }
+
+    public void saveTransfuserContent(Player player, String name, Inventory inventory) {
         UUID playerUUID = player.getUniqueId();
         FileConfiguration playerConfig = getPlayerConfig(player);
         List<ItemStack> items = Arrays.asList(inventory.getContents());
@@ -192,7 +244,7 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         savePlayerConfig(player, playerConfig);
     }
 
-    private void loadAllTransfusers() {
+    public void loadAllTransfusers() {
         File playersDir = new File(getDataFolder(), "playerdata");
         if (playersDir.exists() && playersDir.isDirectory()) {
             for (File playerFile : playersDir.listFiles()) {
@@ -217,7 +269,7 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         }
     }
 
-    private void saveAllTransfusers() {
+    public void saveAllTransfusers() {
         for (UUID playerUUID : playerTransfusers.keySet()) {
             Player player = Bukkit.getPlayer(playerUUID);
             if (player != null && player.isOnline()) {
@@ -252,83 +304,22 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         }
     }
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (sender instanceof Player) {
-            Player player = (Player) sender;
-            if (args.length > 0) {
-                if (args[0].equalsIgnoreCase("create")) {
-                    if (player.hasPermission("transfuser.create")) {
-                        openCreateTransfuserMenu(player);
-                    } else {
-                        player.sendMessage("You do not have permission to create a transfuser.");
-                    }
-                } else if (args[0].equalsIgnoreCase("destroy")) {
-                    if (player.hasPermission("transfuser.destroy")) {
-                        openDestroyTransfuserMenu(player);
-                    } else {
-                        player.sendMessage("You do not have permission to destroy a transfuser.");
-                    }
-                } else if (args[0].equalsIgnoreCase("get") && args.length == 2) {
-                    if (player.hasPermission("transfuser.admin")) {
-                        int amount;
-                        try {
-                            amount = Integer.parseInt(args[1]);
-                        } catch (NumberFormatException e) {
-                            player.sendMessage("Invalid amount.");
-                            return false;
-                        }
-                        giveTransfuserRemote(player, amount);
-                    } else {
-                        player.sendMessage("You do not have permission to use this command.");
-                    }
-                } else if (args[0].equalsIgnoreCase("give") && args.length == 3) {
-                    if (player.hasPermission("transfuser.admin")) {
-                        Player target = Bukkit.getPlayer(args[1]);
-                        if (target != null) {
-                            int amount;
-                            try {
-                                amount = Integer.parseInt(args[2]);
-                            } catch (NumberFormatException e) {
-                                player.sendMessage("Invalid amount.");
-                                return false;
-                            }
-                            giveTransfuserRemote(target, amount);
-                        } else {
-                            player.sendMessage("Player not found.");
-                        }
-                    } else {
-                        player.sendMessage("You do not have permission to use this command.");
-                    }
-                } else {
-                    if (useTransfuserCommand && player.hasPermission("transfuser.use")) {
-                        openTransfuserMenu(player);
-                    } else {
-                        player.sendMessage("You do not have permission to use this command.");
-                    }
-                }
-            }
-            return true;
-        }
-        return false;
-    }
-
-    private void openCreateTransfuserMenu(Player player) {
+    public void openCreateTransfuserMenu(Player player) {
         Inventory gui = Bukkit.createInventory(null, 9, "Create Transfuser");
 
-        ItemStack smallTransfuser = new ItemStack(Material.CHEST);
+        ItemStack smallTransfuser = new ItemStack(Material.ENDER_CHEST);
         ItemMeta smallMeta = smallTransfuser.getItemMeta();
         smallMeta.setDisplayName("Small Transfuser (8 slots)");
         smallTransfuser.setItemMeta(smallMeta);
         gui.setItem(0, smallTransfuser);
 
-        ItemStack mediumTransfuser = new ItemStack(Material.CHEST);
+        ItemStack mediumTransfuser = new ItemStack(Material.ENDER_CHEST);
         ItemMeta mediumMeta = mediumTransfuser.getItemMeta();
         mediumMeta.setDisplayName("Medium Transfuser (18 slots)");
         mediumTransfuser.setItemMeta(mediumMeta);
         gui.setItem(1, mediumTransfuser);
 
-        ItemStack largeTransfuser = new ItemStack(Material.CHEST);
+        ItemStack largeTransfuser = new ItemStack(Material.ENDER_CHEST);
         ItemMeta largeMeta = largeTransfuser.getItemMeta();
         largeMeta.setDisplayName("Large Transfuser (27 slots)");
         largeTransfuser.setItemMeta(largeMeta);
@@ -337,11 +328,11 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         player.openInventory(gui);
     }
 
-    private void openDestroyTransfuserMenu(Player player) {
+    public void openDestroyTransfuserMenu(Player player) {
         Inventory gui = Bukkit.createInventory(null, 27, "Destroy Transfuser");
         List<String> transfusers = getPlayerConfig(player).getStringList("transfusers");
         for (String transfuser : transfusers) {
-            ItemStack item = new ItemStack(Material.CHEST);
+            ItemStack item = new ItemStack(Material.ENDER_CHEST);
             ItemMeta meta = item.getItemMeta();
             meta.setDisplayName(transfuser);
             item.setItemMeta(meta);
@@ -349,7 +340,21 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         }
         player.openInventory(gui);
     }
-    private void giveTransfuserRemote(Player player, int amount) {
+
+    public void openRenameTransfuserMenu(Player player, String newName) {
+        Inventory gui = Bukkit.createInventory(null, 27, "Rename Transfuser to " + ChatColor.translateAlternateColorCodes('&', newName));
+        List<String> transfusers = getPlayerConfig(player).getStringList("transfusers");
+        for (String transfuser : transfusers) {
+            ItemStack item = new ItemStack(Material.ENDER_CHEST);
+            ItemMeta meta = item.getItemMeta();
+            meta.setDisplayName(transfuser);
+            item.setItemMeta(meta);
+            gui.addItem(item);
+        }
+        player.openInventory(gui);
+    }
+
+    public void giveTransfuserRemote(Player player, int amount) {
         FileConfiguration config = getConfig();
         String materialName = config.getString("Transfuser-Remote-Item.Material");
         Material material = Material.valueOf(materialName);
@@ -374,17 +379,4 @@ public final class Transfuser extends JavaPlugin implements Listener, TabExecuto
         player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&aYou have been given " + amount + " Transfuser Remote(s)."));
     }
 
-    @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 1) {
-            return Arrays.asList("create", "destroy", "get", "give");
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            List<String> playerNames = new ArrayList<>();
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                playerNames.add(player.getName());
-            }
-            return playerNames;
-        }
-        return null;
-    }
 }

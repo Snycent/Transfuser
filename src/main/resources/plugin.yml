@@ -19,6 +19,9 @@ permissions:
   transfuser.destroy:
     description: Allows a player to destroy a transfuser
     default: true
+  transfuser.rename:
+    description: Allows a player to rename a transfuser
+    default: true
   transfuser.admin:
     description: Allows a player to use admin commands for transfuser
     default: op
