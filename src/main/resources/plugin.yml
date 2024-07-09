@@ -1,8 +1,8 @@
 name: Transfuser
-version: '1.0.1'
+version: 1.0.1
 main: net.stardew.transfuser.Transfuser
 author: [Snycent]
-api-version: '1.20'
+api-version: 1.20
 commands:
   transfuser:
     description: Transfuser main command
@@ -12,6 +12,12 @@ commands:
 permissions:
   transfuser.use:
     description: Allows a player to use transfuser commands
+    default: true
+  transfuser.create:
+    description: Allows a player to create a transfuser
+    default: true
+  transfuser.destroy:
+    description: Allows a player to destroy a transfuser
     default: true
   transfuser.admin:
     description: Allows a player to use admin commands for transfuser
